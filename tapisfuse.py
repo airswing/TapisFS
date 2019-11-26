@@ -37,12 +37,20 @@ class TapisFuse(Operations):
 
     def read(self, path, size, offset, fh):
         full_path = self._full_path(path)
+        # if a new file request
         if offset == 0:
-            file = self.ag.files.download(filePath=full_path, systemId=self.system_id)
-            self.current_files[full_path] = file.content
-            return file.content[:size]
-        else:
-            return self.current_files[full_path][offset:offset+size]
+            file_info = self.ag.files.list(filePath=full_path, systemId=self.system_id)[0]
+            # if file not cached or cache is out of date
+            if self.current_files.get(full_path) is None or \
+                    (self.current_files[full_path]['last_modified'] != file_info['lastModified'] or
+                     self.current_files[full_path]['size'] != file_info['length']):
+                file = self.ag.files.download(filePath=full_path, systemId=self.system_id)
+                self.current_files[full_path] = {
+                    'bytes': file.content,
+                    'last_modified': file_info['lastModified'],
+                    'size': file_info['length'],
+                }
+        return self.current_files[full_path]['bytes'][offset:offset + size]
 
     def get_json_path(self):
         for file in self.json_resp:
